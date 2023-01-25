@@ -1,11 +1,21 @@
 #![forbid(unsafe_code)]
 
+use digest::InvalidLength;
 use hmac::{Hmac, Mac};
 use jwt::{SignWithKey, VerifyWithKey};
 pub use jwt::Error as JwtError;
 pub use serde_json::{Value, to_value, from_value};
 use sha2::{Sha256, Digest};
 use std::collections::BTreeMap;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("invalid length")]
+    InvalidLength(#[from] InvalidLength),
+    #[error("signing error")]
+    SignErr(#[from] JwtError),
+}
 
 fn hash_password(pass: &str, salt: &str) -> String {
     let mut hasher = Sha256::new();
@@ -26,41 +36,16 @@ pub fn verify(pass: &str, safe_pass: &str) -> bool {
     if req_hash == split[1] { true } else { false }
 }
 
-#[derive(Debug)]
-pub enum SignErr {
-    InvalidLength,
-    SigningErr(JwtError)
-}
-
-pub fn to_token(app_secret: &str, claims: BTreeMap<String, Value>) -> Result<String, SignErr> {
-    let key: Hmac<Sha256> = match Hmac::new_from_slice(app_secret.as_bytes()) {
-        Ok(key) => key,
-        Err(_) => { return Err(SignErr::InvalidLength) }
-    };
-    let token = match claims.sign_with_key(&key) {
-        Ok(token) => token,
-        Err(e) => return Err(SignErr::SigningErr(e))
-    };
+pub fn to_token(app_secret: &str, claims: BTreeMap<String, Value>) -> Result<String, Error> {
+    let key: Hmac<Sha256> = Hmac::new_from_slice(app_secret.as_bytes())?;
+    let token = claims.sign_with_key(&key)?;
     Ok(token)
 }
 
-#[derive(Debug)]
-pub enum DecryptErr {
-    Hmac,
-    Jwt(JwtError)
-}
-
-pub fn from_token(app_secret: &str, token: &str) -> Result<BTreeMap<String, Value>, DecryptErr> {
-    let key: Hmac<Sha256> = match Hmac::new_from_slice(app_secret.as_bytes()) {
-        Ok(k) => k,
-        Err(_e) => {
-            return Err(DecryptErr::Hmac)
-        }
-    };
-    match token.verify_with_key(&key) {
-        Ok(claims) => Ok(claims),
-        Err(e) => Err(DecryptErr::Jwt(e))
-    }
+pub fn from_token(app_secret: &str, token: &str) -> Result<BTreeMap<String, Value>, Error> {
+    let key: Hmac<Sha256> = Hmac::new_from_slice(app_secret.as_bytes())?;
+    let claims = token.verify_with_key(&key)?;
+    Ok(claims)
 }
 
 #[cfg(test)]
