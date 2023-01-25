@@ -6,7 +6,7 @@ Boilerplate code for JWT token signing and decrypting.
 
 ```toml
 [dependencies]
-boiler-jwt = "0.1.0"
+boiler-jwt = "0.1.1"
 ```
 
 ## JWT Signing and Verifying Example
